@@ -128,7 +128,7 @@ class MG5Run:
 
                 process can be an ARRAY.
                 model    ||= 'sm'
-                laststep ||= 'auto'  [auto|parton|pythia|pgs|delphes]
+                laststep ||= 'parton'  [auto|parton|pythia|pgs|delphes]
 
                 cards : ""     => cards in current directory are used.
                         STRING => interpreted as a prefix. i.e. "STRING_run_card.dat" etc.
@@ -214,7 +214,7 @@ class MG5Run:
         os.remove(f.name)
         return MG5Output(mg5=self, dir_name=dir_name)
 
-    def launch(self, dir_name, laststep='auto', cards=None, run_name=""):
+    def launch(self, dir_name, laststep='parton', cards=None, run_name=""):
         MG5Output(mg5=self, dir_name=dir_name).launch(laststep=laststep, cards=cards, run_name=run_name)
 
 
@@ -242,8 +242,8 @@ class MG5Output:
     def move_cards(self, cards):
         pass
 
-    def launch(self, laststep='auto', cards=None, run_name=""):
-        laststep = laststep.lower() if laststep else 'auto'
+    def launch(self, laststep='parton', cards=None, run_name=""):
+        laststep = laststep.lower()
         if not (laststep in self.LASTSTEPS):
             raise InvalidLaunchError
         self.move_cards(cards)
