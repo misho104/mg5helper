@@ -7,6 +7,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import re
 import sys
 import shutil
 import time
@@ -14,13 +15,13 @@ import textwrap
 import select
 import tempfile
 import subprocess
+import glob
 
 __version__ = "1.0.1"
 __date__ = "21 Jan 2017"
 __author__ = "Sho Iwamoto"
 __license__ = "MIT"
 __status__ = "Development"
-
 
 # Python 2 <-> 3 #####################################################
 try:
@@ -68,6 +69,22 @@ class InvalidLaunchError(ValueError):
         return "Invalid launch options are specified."
 
 
+class CardSpecificationError(ValueError):
+    def __init__(self, message=None):
+        self.message = ' ({})'.format(message) if message else ""
+
+    def __str__(self):
+        return 'Invalid card specification{}.'.format(self.message)
+
+
+class CardReplaceKeyError(KeyError):
+    def __init__(self, keyerror, filename):
+        self.message = 'Card {} has an undefined key: {}'.format(filename, keyerror.message)
+
+    def __str__(self):
+        return self.message
+
+
 class MG5Error(BaseException):
     def __init__(self, message, cmd=None):
         self.message = message
@@ -93,11 +110,71 @@ class MG5Helper:
         print('{green}[info] {m}{end}'.format(green='\033[92m', m=message, end='\033[0m'))
 
     @classmethod
+    def notice(cls, message):
+        print('{blue}[info] {m}{end}'.format(blue='\033[94m', m=message, end='\033[0m'))
+
+    @classmethod
     def timeout_input(cls, prompt="", timeout=3):
         print(prompt, end="")
         sys.stdout.flush()
         i, o, e = select.select([sys.stdin], [], [], timeout)
         return sys.stdin.readline().strip() if i else ""
+
+
+class MG5Card:
+    def __init__(self, key, specification):
+        self.key = key
+        if is_str(specification):
+            self.file = specification
+            self.rules = dict()
+        elif isinstance(specification, tuple):
+            try:
+                self.file, rules = specification
+            except ValueError:
+                raise CardSpecificationError("string or two-valued tuple")
+
+            if isinstance(rules, dict):
+                self.rules = rules
+            elif isinstance(rules, list):
+                self.rules = dict((str(i), v) for i, v in enumerate(rules))
+            else:
+                raise CardSpecificationError("invalid replace rules")
+        self.replaces = 0
+
+    VAR_REGEX = re.compile('<<<+%(,+?)>>>+')
+
+    def __replacement(self, key):
+        self.replaces += 1
+        try:
+            return self.rules[key]
+        except KeyError as e:
+            raise CardReplaceKeyError(e, self.file)
+
+    def _read(self):
+        # TODO: error handling?
+        f = open(self.file)
+        raw = f.read()
+        f.close()
+        return re.sub(self.VAR_REGEX, lambda m: self.__replacement(m.group[1]), raw)
+
+    def card_name(self):
+        return "delphes_trigger.dat" if self.key == "trigger" else '{}_card.dat'.format(self.key)
+
+    def write(self, dir_name):
+        target = os.path.join(dir_name, self.card_name())
+
+        if self.file == '-':
+            if os.path.exists(target):
+                os.remove(target)
+            MG5Helper.notice("Card: removed {} ".format(target))
+            return ""
+
+        data = self._read()
+        f = open(target, "w")  # TODO: error handling?
+        f.write(data)
+        f.close()
+        MG5Helper.notice("Card: {} -> {} ({} replacements)".format(self.file, target, self.replaces))
+        return target
 
 
 class MG5Run:
@@ -121,30 +198,30 @@ class MG5Run:
     @classmethod
     def help(cls):
         print(textwrap.dedent("""\
-                This code is used as a module!
+            This code is used as a module!
 
-                Usage: output(process(es), directory, [model])
-                       launch(directory, [laststep], [cards], [runname])
+            Usage: output(process(es), directory, [model])
+                   launch(directory, [laststep], [cards], [runname])
 
-                process can be an ARRAY.
-                model    ||= 'sm'
-                laststep ||= 'parton'  [auto|parton|pythia|pgs|delphes]
+            process can be an ARRAY.
+            model    ||= 'sm'
+            laststep ||= 'parton'  [auto|parton|pythia|pgs|delphes]
+            runname  ||= 'run_XX'
 
-                cards : ""     => cards in current directory are used.
-                        STRING => interpreted as a prefix. i.e. "STRING_run_card.dat" etc.
-                        HASH   => {'param' => 'param_card.dat',
-                                   'run'   => 'run_card.dat',
-                                   'plot'  => 'plot_card.dat, ... }
-                                  [param,run,pythia,pgs,delphes,plot,grid,...]
-                                    any keys are accepted.
-                                  Card names can be an array [TEMPLATE, rules],
-                                    where rules is a manipulation rule (array or hash).
+            two manipulation modes are prepared:
+              - In prefix-suffix mode, all known cards with specified suffix/prefix are copied.
+                This mode is called if a string is specified, which is regarded as a prefix,
+                or a dict with "prefix" and/or "suffix" is specified.
 
-                        OR
-                             {'prefix' => 'xxx', 'suffix' => 'yyy'}
-                             is equivalent to the STRING case.
-
-                runname  ||= 'run_XX'"""))
+              - If a dict like
+                  { 'param' = (template, rules),
+                    'run'   = (template, rules), ... }
+                is specified, the templates are copied after the rules are applied.
+                For a dict rule, <<<%key>>> is replaced to the value.
+                For a list rule, <<<%n>>> is replaced to the n-th element.
+                rules can be a string, for which no rules are applied.
+                If template is '-', the corresponding card is removed.
+        """))
 
     """
         Properties:
@@ -240,7 +317,36 @@ class MG5Output:
         self.dir_name = dir_name
 
     def move_cards(self, cards):
-        pass
+        if is_str(cards):
+            prefix, suffix = cards, ""
+            self.find_and_move_all_cards(prefix, suffix)
+        elif isinstance(cards, dict) and ("prefix" in cards or "suffix" in cards):
+            prefix, suffix = cards.pop("prefix", ""), cards.pop("suffix", "")
+            if len(cards) != 0:
+                raise CardSpecificationError()
+            self.find_and_move_all_cards(prefix, suffix)
+        elif isinstance(cards, dict):
+            for k, v in cards.items():
+                MG5Card(k, v).write(os.path.join(self.dir_name, 'Cards'))
+        else:
+            raise CardSpecificationError()
+        print()
+
+    def find_and_move_all_cards(self, prefix, suffix):
+        if not re.match(r'.*[/_-]'):
+            prefix = prefix + "_"
+        if suffix:
+            suffix = "_" + suffix + ".dat"
+        else:
+            suffix = ".dat"
+
+        for k in ["param_card", "run_card", "pythia_card", "pgs_card",
+                  "delphes_card", "grid_card", "plot_card", "delphes_trigger"]:
+            source = prefix + k + suffix
+            target = os.path.join(self.dir_name, 'Cards', k + ".dat")
+            if os.path.isfile(source):
+                shutil.copy(source, target)
+                MG5Helper.notice("Card: {} -> {}".format(source, target))
 
     def launch(self, laststep='parton', cards=None, run_name=""):
         laststep = laststep.lower()
@@ -285,34 +391,6 @@ class MG5Output:
         return ''.join(log)
 
 
-# sub move_cards{
-#   my ($dir, $cards) = @_;
-#   my %c = find_cards($cards);
-#   foreach(keys(%c)){
-#     my $card = get_card_name($_);
-#     my $output = "$dir/Cards/$card";
-#
-#     unlink($output) if -e $output;
-#
-#     my $msg;
-#     if(ref($c{$_}) eq 'ARRAY' and @{$c{$_}} == 2){
-#       my ($template, $rules) = @{$c{$_}};
-#       manipulate_card($template, $output, $rules);
-#       $msg = "$template with " . manipulate_card_rules_to_text($rules);
-#     }elsif(ref($c{_}) eq ''){
-#       my $cmd = "cp -Lf " . $c{$_} . " $output";
-#       system($cmd) unless $c{$_} eq "-";
-#       if($?){
-#         error("fail in moving a card. the command tried to execute is:\n\t".$cmd);
-#       }
-#       $msg = $c{$_};
-#     }else{
-#       error("invalid card options");
-#     }
-#     info(uc($card)." : $msg");
-#   }
-# }
-#
 # sub is_process_decay{
 #   my ($dir) = shift;
 #   open(PROC, "$dir/Cards/proc_card_mg5.dat");
@@ -324,134 +402,6 @@ class MG5Output:
 #   }
 #   close(PROC);
 #   error("fail detecting the process.");
-# }
-#
-# #==============================================================================#
-# # Card manipulation                                                            #
-# #==============================================================================#
-# sub find_cards{
-#   my $cards = $_[0] || "";
-#   my %c = ();
-#   my $mode = "";
-#   my ($prefix, $suffix) = ("", "");
-#
-#   if(ref($cards) eq 'HASH'){
-#     foreach(keys(%$cards)){
-#       my $a = lc($_);
-#       if($a eq 'prefix' or $a eq 'suffix'){
-#         error('invalid cards specified.') if $mode eq 'HASH';
-#         $mode = 'STRING';
-#         $prefix = $cards->{'prefix'} if $a eq 'prefix';
-#         $suffix = $cards->{'suffix'} if $a eq 'suffix';
-#       }else{
-#         error('invalid cards specified.') if $mode eq 'STRING';
-#         $mode = 'HASH';
-#       }
-#     }
-#   }elsif(ref($cards) eq ''){
-#     ($mode, $prefix, $suffix) = ('STRING', $cards, "");
-#   }else{
-#     error('invalid cards specified.');
-#   }
-#
-#   if($mode eq 'HASH'){
-#     foreach(keys(%$cards)){
-#       my $fn = ref($cards->{$_}) eq 'ARRAY' ? $cards->{$_}->[0] : $cards->{$_};
-#       my $c = get_card_name($_);
-#       error  ("invalid card name ${_}.") unless $c;
-#       error  (uc($c)." [$fn] not found.") unless $fn eq "-" or -f $fn;
-#     }
-#     %c = %$cards;
-#   }else{
-#     my $p = $prefix !~ /[\/_-]$/ ? $prefix : $prefix."_";
-#     my $s = $suffix ? "_$suffix.dat" : ".dat";
-#     foreach(`ls $p*$s 2>/dev/null`){
-#       chomp;
-#       next unless $_ =~ /^$p(.*)$s/;
-#       my $key = ($1 eq 'delphes_trigger') ? 'trigger' : ($1 =~ /^([a-z]+)_card$/) ? $1 : "";
-#
-#       my $card = get_card_name($key);
-#       unless($card){
-#         warning("file [$_] cannot be recognized and ignored.");
-#         next;
-#       }
-#       warning("file [$_] found. so used as ".uc($card).".");
-#       $c{$key} = $_;
-#     }
-#   }
-#   return %c;
-# }
-#
-# sub get_card_name{
-#   my $c = lc($_[0]||"");
-#   if($c =~ /^(param|run|pythia|pgs|delphes|grid|plot)$/){
-#     return "${c}_card.dat";
-#   }elsif($c eq 'trigger'){
-#     return "delphes_trigger.dat";
-#   }
-#   return "";
-# }
-#
-# sub manipulate_card{
-#   my ($in, $out, @args) = @_;
-#   open(my $out_fh, ">$out");
-#   manipulate_card_sub($in, $out_fh, manipulate_card_rules(@args));
-#   close($out_fh);
-# }
-#
-# sub manipulate_card_sub{
-#   my ($in, $out_fh, $rules) = @_;
-#   my $in_fh;
-#   if($in =~ /^\*\w+::DATA$/){
-#     $in_fh = $in;
-#   }else{
-#     open($in_fh, $in) || die "$in not found";
-#   }
-#   foreach(<$in_fh>){
-#     s/<<<+%([\w\-\.]+) *>>>+/
-#       if(exists($rules->{$1})){
-#         my $v = $rules->{$1};
-#         my $spacing = length($&) - length($v);
-#         $spacing = 0 if $spacing < 0;
-#         print "Replacing ::  %$1 => $v\n";
-#         (" "x$spacing).$v;
-#       }else{
-#         error("Cannot replace $&");
-#       }
-#     /eg;
-#     print $out_fh $_;
-#   }
-#   close($in_fh);
-# }
-#
-# sub generate_temporal_card{
-#   my ($in, @args) = @_;
-#   my ($fh, $filename) = tempfile("tmp_XXXX", SUFFIX => '.dat');
-#   manipulate_card_sub($in, $fh, manipulate_card_rules(@args));
-#   close $fh;
-#   return $filename;
-# }
-#
-# sub manipulate_card_rules{
-#   if(@_ == 1 and ref($_[0]) eq 'HASH'){
-#     return $_[0];
-#   }
-#   my @rule_list = (@_ == 1 and ref($_[0]) eq 'ARRAY') ? @{$_[0]} : @_;
-#   foreach(@rule_list){
-#     if(ref($_)){
-#       error("Invalid replace rule. Rule should be a hash, an array, or a list of scalar values.");
-#     }
-#   }
-#   my $rules = {};
-#   for(0..$#rule_list){
-#     $rules->{1+$_} = $rule_list[$_];
-#   }
-#   return $rules;
-# }
-#
-# sub manipulate_card_rules_to_text{
-#   my $rules = manipulate_card_rules($_[0]);
-#   return '{' . join(", ", map{"$_ => $rules->{$_}"} sort keys %$rules) . "}";
 # }
 #
 # #==============================================================================#
