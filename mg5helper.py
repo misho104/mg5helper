@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2017-01-21 14:26:24>
+# Time-Stamp: <2017-01-22 18:27:15>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -273,10 +273,10 @@ class MG5Run:
                 mg5cmd.append(line)
         for i, proc in enumerate(to_list(process)):
             assert_is_str(proc, "process")
-            mg5cmd.append("{cmd} {proc} @ {i}".format(
-                cmd=("generate" if i == 1 else "add process"),
+            mg5cmd.append("{cmd} {proc} @ {n}".format(
+                cmd=("generate" if i == 0 else "add process"),
                 proc=proc,
-                i=i + 1))  # i is zero-origin
+                n=i+1))  # i is zero-origin
         mg5cmd.append("output {} -f".format(dir_name))
         with tempfile.NamedTemporaryFile(mode='w', prefix='tmp.mg5out.', dir='.', delete=False) as f:
             f.write('\n'.join(mg5cmd))
