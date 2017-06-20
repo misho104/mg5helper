@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2017-01-22 18:27:15>
+# Time-Stamp: <2017-06-20 16:37:47>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -340,7 +340,7 @@ class MG5Output:
         else:
             suffix = ".dat"
 
-        for k in ["param_card", "run_card", "pythia_card", "pgs_card",
+        for k in ["param_card", "run_card", "pythia_card", "pythia8_card", "pgs_card",
                   "delphes_card", "grid_card", "plot_card", "delphes_trigger"]:
             source = prefix + k + suffix
             target = os.path.join(self.dir_name, 'Cards', k + ".dat")
