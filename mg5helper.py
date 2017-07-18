@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2017-06-20 16:37:47>
+# Time-Stamp: <2017-07-18 23:00:45>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -146,16 +146,18 @@ class MG5Card:
     def __replacement(self, key):
         self.replaces += 1
         try:
-            return self.rules[key]
+            value = self.rules[key]
         except KeyError as e:
             raise CardReplaceKeyError(e, self.file)
+        if isinstance(value, float) or isinstance(value, int):
+            value = str(value)
+        return value
 
     def _read(self):
         # TODO: error handling?
-        f = open(self.file)
-        raw = f.read()
-        f.close()
-        return re.sub(self.VAR_REGEX, lambda m: self.__replacement(m.group[1]), raw)
+        with open(self.file) as f:
+            raw = f.read()
+        return re.sub(self.VAR_REGEX, lambda m: self.__replacement(m.group(1)), raw)
 
     def card_name(self):
         return "delphes_trigger.dat" if self.key == "trigger" else '{}_card.dat'.format(self.key)
