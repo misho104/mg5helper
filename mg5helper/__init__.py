@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2018-08-10 15:51:06>
+# Time-Stamp: <2018-08-27 16:46:12>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -9,7 +9,7 @@ import pathlib
 import re
 import shutil
 import textwrap
-from typing import Mapping, Union, Optional, List, Tuple
+from typing import Mapping, Union, Optional, List
 
 import mg5helper.exceptions as exceptions
 import mg5helper.utility as utility
@@ -21,9 +21,13 @@ __author__ = 'Sho Iwamoto / Misho'
 __license__ = 'MIT'
 __status__ = 'Development'
 
+ProcessType = Union[str, List[str]]
+PathType = Union[pathlib.Path, str]
+CardDictType = Mapping[str, 'MG5Card']
+
 
 class MG5():
-    PATH = None                                          # type: Union[pathlib.Path, None]
+    PATH = None                                          # type: Optional[pathlib.Path]
     SEARCH_PATHS = [os.environ.get('HEP_MG5', ''), '.']  # type: List[str]
 
     @classmethod
@@ -37,7 +41,7 @@ class MG5():
                 return pathlib.Path(m)
         return None
 
-    def __init__(self, mg5bin: Union[pathlib.Path, str, None]=None, output_force: Optional[bool]= None)->None:
+    def __init__(self, mg5bin: Optional[PathType]=None, output_force: Optional[bool]= None)->None:
         mg5bin = shutil.which(str(mg5bin)) if mg5bin else None
         self.mg5bin = pathlib.Path(mg5bin) if mg5bin else self.__mg5bin_default()  # type: Optional[pathlib.Path]
         self.output_force = output_force                                           # type: Optional[bool]
@@ -49,7 +53,7 @@ class MG5():
             stdout = f.run()
         return stdout
 
-    def output(self, *args, **kwargs):
+    def output(self, *args, **kwargs)->'MG5Output':
         obj = MG5Output(*args, **kwargs)
         obj.mg5 = self
         if obj.path.exists():
@@ -71,13 +75,14 @@ class MG5():
 
     def launch(self,
                output: 'MG5Output',
-               cards: Optional[Mapping[str, 'MG5Card']]=dict(),
+               cards: Optional[CardDictType]=None,
                name: str='',
                laststep: str = '',
                options: str='--multicore')->'MG5Launch':
 
-        for k, v in cards.items():
-            output.set_card(k, v)
+        if cards:
+            for k, v in cards.items():
+                output.set_card(k, v)
         stdout = self.run_command(textwrap.dedent("""\
                 set automatic_html_opening False
                 launch {dir} {name_tag} {last_tag} {options} -f
@@ -92,8 +97,8 @@ class MG5():
 
 class MG5Output:
     def __init__(self,
-                 process: Union[str, List[str]],
-                 path: Union[str, pathlib.Path],
+                 process: ProcessType,
+                 path: PathType,
                  model: str='sm',
                  extra_code: Union[str, List[str]]=list(),
                  force: Optional[bool]=None,
@@ -110,7 +115,7 @@ class MG5Output:
         return self._path
 
     @path.setter
-    def path(self, path: Union[pathlib.Path, str])->None:
+    def path(self, path: PathType)->None:
         self._path = pathlib.Path(path)
         if self._path.is_absolute():
             raise exceptions.AbsolutePathSpecifiedError
@@ -146,7 +151,7 @@ class MG5Output:
             fo.write(text)
 
     def launch(self,
-               cards: Optional[Mapping[str, 'MG5Card']]=dict(),
+               cards: Optional[CardDictType]=None,
                name: str='',
                laststep: str='',
                options: str='--multicore')->'MG5Launch':
@@ -157,7 +162,7 @@ class MG5Output:
 
 
 class MG5Card:
-    def __init__(self, path: Union[str, pathlib.Path], replace_pattern: Optional[Mapping]=None)->None:
+    def __init__(self, path: PathType, replace_pattern: Optional[Mapping]=None)->None:
         self.path = path
         self.replace_pattern = replace_pattern
 
@@ -166,7 +171,7 @@ class MG5Card:
         return self._path
 
     @path.setter
-    def path(self, path: Union[pathlib.Path, str])->None:
+    def path(self, path: PathType)->None:
         self._path = pathlib.Path(path)
         if not self._path.is_file():
             raise FileNotFoundError(self._path)
