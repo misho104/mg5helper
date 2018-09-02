@@ -17,6 +17,8 @@ cards_abbrev = {
     'delphes': 'delphes_card.dat',
     'shower': 'shower_card.dat',
     'plot': 'plot_card.dat',
+    'madspin': 'madspin_card.dat',
+    'reweight': 'reweight_card.dat',
 }
 
 
