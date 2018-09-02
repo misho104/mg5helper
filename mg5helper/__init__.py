@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2018-08-27 16:46:12>
+# Time-Stamp: <2018-09-02 23:13:06>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -54,7 +54,9 @@ class MG5():
         return stdout
 
     def output(self, *args, **kwargs)->'MG5Output':
-        obj = MG5Output(*args, **kwargs)
+        return self._output(MG5Output(*args, **kwargs))
+
+    def _output(self, obj: 'MG5Output')->'MG5Output':
         obj.mg5 = self
         if obj.path.exists():
             if not obj.path.is_dir():
@@ -132,6 +134,12 @@ class MG5Output:
             generate='generate ' + '\nadd process '.join(self.process),
             output_path=self.path,
         ))
+
+    def output(self):
+        if self.mg5 is None:
+            logger.debug('New mg5 instance is created.')
+            self.mg5 = MG5()
+        return self.mg5._output(self)
 
     def set_card(self, card_name: str, card: 'MG5Card')->None:
         if not self.path.is_dir():
