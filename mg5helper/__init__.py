@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2018-09-02 23:13:06>
+# Time-Stamp: <2018-09-02 23:14:45>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -72,7 +72,6 @@ class MG5():
                 logger.warning('Path [{}] exists; output interrupted as requested.'.format(obj.path))
                 return obj
         self.run_command(obj.to_output_command())
-
         return obj
 
     def launch(self,
@@ -200,7 +199,6 @@ class MG5Launch:
 
     @classmethod
     def parse_output(cls, output: List[str])->'MG5Launch':
-        print(1)
         obj = cls()
         for i, line in enumerate(output):
             match = cls.re_summary_line_1.match(line)
@@ -224,7 +222,6 @@ class MG5Launch:
             if match:
                 obj.nev = int(match.group(1))
                 continue
-        print(obj)
         return obj
 
     @property
