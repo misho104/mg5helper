@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2018-09-03 16:59:42>
+# Time-Stamp: <2018-09-03 17:05:35>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -53,16 +53,15 @@ class MG5():
             stdout = f.run()
         return stdout
 
-    def output(self, *args, **kwargs)->'MG5Output':
-        return self._output(MG5Output(*args, **kwargs))
+    def output(self, *args, force: Optional[bool]=None, **kwargs)->'MG5Output':
+        return self._output(MG5Output(*args, **kwargs), force)
 
-    def _output(self, obj: 'MG5Output')->'MG5Output':
+    def _output(self, obj: 'MG5Output', force: Optional[bool])->'MG5Output':
         obj.mg5 = self
         if obj.path.exists():
             if not obj.path.is_dir():
                 logger.warning('Path [{}] exists as non-directory; output interrupted.'.format(obj.path))
 
-            force = obj.force
             if force is None:
                 yn = utility.timeout_input('Path [{}] exists. Overwrite? [y/N] (3 sec)\n > '.format(obj.path))
                 force = (yn.lower() == 'y')
@@ -104,13 +103,11 @@ class MG5Output:
                  path: PathType,
                  model: str='sm',
                  extra_code: Union[str, List[str]]=list(),
-                 force: Optional[bool]=None,
                  )->None:
         self.process = [process] if isinstance(process, str) else process              # type: List[str]
         self.path = path
         self.model = model                                                             # type: str
         self.extra_code = [extra_code] if isinstance(extra_code, str) else extra_code  # type: List[str]
-        self.force = force
         self.mg5 = None  # type: Optional[MG5]
 
     @property
@@ -136,11 +133,11 @@ class MG5Output:
             output_path=self.path,
         ))
 
-    def output(self):
+    def output(self, force: Optional[bool]=None):
         if self.mg5 is None:
             logger.debug('New mg5 instance is created.')
             self.mg5 = MG5()
-        return self.mg5._output(self)
+        return self.mg5._output(self, force)
 
     def set_card(self, card_name: str, card: 'MG5Card')->None:
         if not self.path.is_dir():
