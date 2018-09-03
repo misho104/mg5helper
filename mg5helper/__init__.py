@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2018-09-02 23:14:45>
+# Time-Stamp: <2018-09-03 16:59:42>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -93,7 +93,9 @@ class MG5():
             last_tag='--laststep='+laststep if laststep else '',
             options=options
         )))
-        return MG5Launch.parse_output(stdout)
+        launch = MG5Launch.parse_output(stdout)
+        launch.path = output.path
+        return launch
 
 
 class MG5Output:
@@ -193,6 +195,8 @@ class MG5Launch:
         self.xserr = kwargs.get('xserr', -1)  # type: float   # fb
         self.nev = kwargs.get('nev', -1)      # type: int
 
+        self.path = None                      # type: Optional[pathlib.Path]
+
     re_summary_line_1 = re.compile(r'\s+===\s+Results Summary for\s+run:\s+(.*?)\s+tag:\s+(.*?)\s+===')
     re_summary_line_2 = re.compile(r'\s+Cross-section:\s+([\d.de+-]+)\s+(\+- ([\d.de+-]+)\s+)(pb|fb)', re.I)
     re_summary_line_3 = re.compile(r'\s+Nb of events:\s+(\d+)', re.I)
@@ -225,8 +229,14 @@ class MG5Launch:
         return obj
 
     @property
-    def event_dir(self)->Optional[str]:
-        if self.run:
-            return 'Events/' + self.run
+    def event_dir(self)->Optional[pathlib.Path]:
+        if self.run and self.path and (self.path / 'Events').is_dir():
+            event_dir = self.path / 'Events' / self.run
+            decay_dirs = [f for f in (self.path / 'Events').glob(f'{self.run}*')
+                          if f.is_dir() and f.name.startswith(f'{self.run}_decayed_')]
+            if decay_dirs:
+                return max(decay_dirs)
+            elif event_dir.is_dir():
+                return event_dir
         else:
             return None
