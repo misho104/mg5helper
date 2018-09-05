@@ -93,7 +93,12 @@ class MG5():
             options=options
         )))
         launch = MG5Launch.parse_output(stdout)
-        launch.path = output.path
+        launch.output = output
+        launch.cards = cards
+        launch.name = name
+        launch.laststep = laststep
+        launch.options = options
+
         return launch
 
 
@@ -192,7 +197,11 @@ class MG5Launch:
         self.xserr = kwargs.get('xserr', -1)  # type: float   # fb
         self.nev = kwargs.get('nev', -1)      # type: int
 
-        self.path = None                      # type: Optional[pathlib.Path]
+        self.output = None                    # type: Optional[MG5Output]
+        self.cards = None                     # type: Optional[CardDictType]
+        self.name = None                      # type: Optional[str]
+        self.laststep = None                  # type: Optional[str]
+        self.options = None                   # type: Optional[str]
 
     re_summary_line_1 = re.compile(r'\s+===\s+Results Summary for\s+run:\s+(.*?)\s+tag:\s+(.*?)\s+===')
     re_summary_line_2 = re.compile(r'\s+Cross-section:\s+([\d.de+-]+)\s+(\+- ([\d.de+-]+)\s+)(pb|fb)', re.I)
@@ -226,6 +235,12 @@ class MG5Launch:
         return obj
 
     @property
+    def path(self)->Optional[pathlib.Path]:
+        if self.output and self.output.path:
+            return self.output.path
+        return None
+
+    @property
     def event_dir(self)->Optional[pathlib.Path]:
         if self.run and self.path and (self.path / 'Events').is_dir():
             event_dir = self.path / 'Events' / self.run
@@ -235,5 +250,4 @@ class MG5Launch:
                 return max(decay_dirs)
             elif event_dir.is_dir():
                 return event_dir
-        else:
-            return None
+        return None
