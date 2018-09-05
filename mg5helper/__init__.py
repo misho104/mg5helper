@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2018-09-03 17:05:35>
+# Time-Stamp: <2018-09-05 12:43:39>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -153,13 +153,7 @@ class MG5Output:
         if not re.match(r'[\w\d\.]+', card_name):
             raise ValueError(card_name)
         destination = self.path / 'Cards' / card_name
-
-        with open(card.path) as fi:
-            text = fi.read()
-        if card.replace_pattern:
-            text = text % card.replace_pattern
-        with open(destination, 'w') as fo:
-            fo.write(text)
+        card.prepare(destination)
 
     def launch(self,
                cards: Optional[CardDictType]=None,
@@ -186,6 +180,18 @@ class MG5Card:
         self._path = pathlib.Path(path)
         if not self._path.is_file():
             raise FileNotFoundError(self._path)
+
+    @property
+    def text(self)->str:
+        with open(self.path) as fi:
+            text = fi.read()
+        if self.replace_pattern:
+            text = text % self.replace_pattern
+        return text
+
+    def prepare(self, destination: PathType)->None:
+        with open(destination, 'w') as fo:
+            fo.write(self.text)
 
 
 class MG5Launch:
