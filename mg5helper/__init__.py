@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2019-06-18 14:24:47>
+# Time-Stamp: <2019-06-18 15:11:54>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -228,7 +228,7 @@ class MG5Launch:
                 if match.group(4) == 'fb':
                     normalization = 1.0
                 elif match.group(4) == 'pb':
-                    normalization = 1e-3
+                    normalization = 1000
                 else:
                     raise RuntimeError
                 obj.xs = float(match.group(1)) * normalization
