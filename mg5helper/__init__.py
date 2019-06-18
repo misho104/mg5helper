@@ -1,6 +1,6 @@
 #!env python3
 # -*- coding: utf-8 -*-
-# Time-Stamp: <2018-09-05 12:43:39>
+# Time-Stamp: <2019-06-18 14:24:47>
 
 """mg5_helper.py: a wrapper module for MadGraph 5."""
 
@@ -209,9 +209,9 @@ class MG5Launch:
         self.laststep = None                  # type: Optional[str]
         self.options = None                   # type: Optional[str]
 
-    re_summary_line_1 = re.compile(r'\s+===\s+Results Summary for\s+run:\s+(.*?)\s+tag:\s+(.*?)\s+===')
-    re_summary_line_2 = re.compile(r'\s+Cross-section:\s+([\d.de+-]+)\s+(\+- ([\d.de+-]+)\s+)(pb|fb)', re.I)
-    re_summary_line_3 = re.compile(r'\s+Nb of events:\s+(\d+)', re.I)
+    re_summary_line_1 = re.compile(r'\s+===\s+Results Summary for\s+run[:\s]+(.*?)\s+tag:\s+(.*?)\s+===')
+    re_summary_line_2 = re.compile(r'\s+Cross-section[:\s]+([\d.de+-]+)\s+(\+- ([\d.de+-]+)\s+)(pb|fb)', re.I)
+    re_summary_line_3 = re.compile(r'\s+Nb of events[:\s]+(\d+)', re.I)
 
     @classmethod
     def parse_output(cls, output: List[str])->'MG5Launch':
